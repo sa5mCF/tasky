@@ -22,6 +22,12 @@ chmod +x install.sh
 ```
 *Note: Make sure to restart your terminal or run `source ~/.zshrc` if the script adds the directory to your `$PATH`.*
 
+Once installed, you can simply run `tasky` in your terminal to get started:
+
+```bash
+tasky
+```
+
 ### Uninstall
 
 To uninstall Tasky:
@@ -31,7 +37,7 @@ chmod +x uninstall.sh
 ./uninstall.sh
 ```
 
-## Usage
+## Usage flags
 
 You can interact with Tasky by using the following flags:
 
@@ -46,7 +52,7 @@ You can interact with Tasky by using the following flags:
 
 *(The ID is the number shown in the `#` column when you list your tasks).*
 
-## Building manually with Make
+## Building manually with Make if you want to contribute to the project
 
 You can also use the included `Makefile` to quickly run commands under the hood:
 
