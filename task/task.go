@@ -2,88 +2,65 @@ package task
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
+var (
+	ErrEmptyTask = errors.New("empty task, not allowed")
+	ErrNotFound  = errors.New("task not found")
+)
+
+type Status string
+
+const (
+	StatusTodo  Status = "todo"
+	StatusDoing Status = "doing"
+	StatusDone  Status = "done"
+)
+
 type Item struct {
+	ID          int64
 	Task        string
-	Doing       bool
-	Done        bool
+	Status      Status
 	CreatedAt   time.Time
 	CompletedAt *time.Time
 }
 
 type Task []Item
 
-func (t *Task) Add(task string) {
-	todo := Item{
-		Task:        task,
-		Done:        false,
-		CreatedAt:   time.Now(),
+func NewItem(description string, now time.Time) (Item, error) {
+	description = strings.TrimSpace(description)
+	if description == "" {
+		return Item{}, ErrEmptyTask
+	}
+
+	return Item{
+		Task:        description,
+		Status:      StatusTodo,
+		CreatedAt:   now,
 		CompletedAt: nil,
-	}
-
-	*t = append(*t, todo)
+	}, nil
 }
 
-func (t *Task) Complete(index int) error {
-	item, err := t.item(index)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now()
-	item.CompletedAt = &now
-	item.Done = true
-
-	return nil
+func (i *Item) MarkDoing() {
+	i.Status = StatusDoing
+	i.CompletedAt = nil
 }
 
-func (t *Task) Delete(index int) error {
-	if err := t.validateIndex(index); err != nil {
-		return err
-	}
-
-	ls := *t
-	*t = append(ls[:index-1], ls[index:]...)
-
-	return nil
+func (i *Item) Complete(now time.Time) {
+	i.Status = StatusDone
+	i.CompletedAt = &now
 }
 
-func (t *Task) Doing(index int) error {
-	item, err := t.item(index)
-	if err != nil {
-		return err
-	}
-
-	item.Doing = true
-
-	return nil
-}
-
-func (t *Task) Counter() int {
+func (t Task) Counter() int {
 	total := 0
 
-	for _, item := range *t {
-		if !item.Done {
+	for _, item := range t {
+		if item.Status != StatusDone {
 			total++
 		}
 	}
 
 	return total
-}
-
-func (t *Task) item(index int) (*Item, error) {
-	if err := t.validateIndex(index); err != nil {
-		return nil, err
-	}
-
-	return &(*t)[index-1], nil
-}
-
-func (t *Task) validateIndex(index int) error {
-	if index <= 0 || index > len(*t) {
-		return errors.New("invalid index")
-	}
-	return nil
 }

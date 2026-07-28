@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/samEscom/tasky/adapter/sqlite"
+	"github.com/samEscom/tasky/application"
 	"github.com/samEscom/tasky/render"
-	"github.com/samEscom/tasky/store"
-	"github.com/samEscom/tasky/task"
 	"github.com/samEscom/tasky/tui"
 )
 
@@ -25,27 +26,31 @@ func main() {
 
 func run() error {
 	add := flag.Bool("add", false, "can add new task to do")
-	complete := flag.Int("complete", 0, "mark a task as completed")
-	doing := flag.Int("doing", 0, "mark a task as doing")
-	deleted := flag.Int("delete", 0, "delete a task")
+	complete := flag.Int64("complete", 0, "mark a task as completed")
+	doing := flag.Int64("doing", 0, "mark a task as doing")
+	deleted := flag.Int64("delete", 0, "delete a task")
 	list := flag.Bool("list", false, "list of all tasks")
 
 	flag.Parse()
 
 	hasCommand := *add || *complete > 0 || *doing > 0 || *deleted > 0 || *list
 
-	dataFile, err := resolveDataFile()
+	databasePath, legacyJSONPath, err := resolveDataFiles()
 	if err != nil {
 		return err
 	}
 
-	todos, err := store.Load(dataFile)
+	ctx := context.Background()
+	repository, err := sqlite.Open(ctx, databasePath, legacyJSONPath)
 	if err != nil {
 		return err
 	}
+	defer repository.Close()
+
+	service := application.NewService(repository, nil)
 
 	if !hasCommand && len(flag.Args()) == 0 {
-		_, err := tui.Run(dataFile, todos)
+		_, err := tui.Run(ctx, service)
 		return err
 	}
 
@@ -56,24 +61,19 @@ func run() error {
 			return err
 		}
 
-		todos.Add(taskText)
-		return store.Save(dataFile, todos)
+		_, err = service.Add(ctx, taskText)
+		return err
 	case *complete > 0:
-		if err := mutateAndSave(dataFile, &todos, func() error {
-			return todos.Complete(*complete)
-		}); err != nil {
+		return service.Complete(ctx, *complete)
+	case *doing > 0:
+		return service.MarkDoing(ctx, *doing)
+	case *deleted > 0:
+		return service.Delete(ctx, *deleted)
+	case *list:
+		todos, err := service.List(ctx)
+		if err != nil {
 			return err
 		}
-		return nil
-	case *doing > 0:
-		return mutateAndSave(dataFile, &todos, func() error {
-			return todos.Doing(*doing)
-		})
-	case *deleted > 0:
-		return mutateAndSave(dataFile, &todos, func() error {
-			return todos.Delete(*deleted)
-		})
-	case *list:
 		render.PrintTasks(todos)
 	default:
 		return errors.New("invalid command")
@@ -82,21 +82,13 @@ func run() error {
 	return nil
 }
 
-func mutateAndSave(filename string, todos *task.Task, mutate func() error) error {
-	if err := mutate(); err != nil {
-		return err
-	}
-
-	return store.Save(filename, *todos)
-}
-
-func resolveDataFile() (string, error) {
+func resolveDataFiles() (string, string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("could not find home directory: %w", err)
+		return "", "", fmt.Errorf("could not find home directory: %w", err)
 	}
 
-	return filepath.Join(home, ".dataTodo.json"), nil
+	return filepath.Join(home, ".dataTodo.db"), filepath.Join(home, ".dataTodo.json"), nil
 }
 
 func getInput(r io.Reader, args ...string) (string, error) {

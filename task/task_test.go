@@ -1,110 +1,72 @@
 package task
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
 
-func TestAdd(t *testing.T) {
-	var todos Task
+func TestNewItem(t *testing.T) {
+	now := time.Date(2026, time.July, 28, 10, 0, 0, 0, time.UTC)
 
-	todos.Add("write tests")
-
-	if got := len(todos); got != 1 {
-		t.Fatalf("expected 1 task, got %d", got)
+	item, err := NewItem("  write tests  ", now)
+	if err != nil {
+		t.Fatalf("NewItem failed: %v", err)
 	}
 
-	if got := todos[0].Task; got != "write tests" {
-		t.Fatalf("expected task text %q, got %q", "write tests", got)
+	if item.Task != "write tests" {
+		t.Fatalf("expected trimmed description, got %q", item.Task)
+	}
+	if item.Status != StatusTodo {
+		t.Fatalf("expected todo status, got %q", item.Status)
+	}
+	if !item.CreatedAt.Equal(now) {
+		t.Fatalf("expected CreatedAt %v, got %v", now, item.CreatedAt)
+	}
+}
+
+func TestNewItemRejectsEmptyDescription(t *testing.T) {
+	if _, err := NewItem("   ", time.Now()); !errors.Is(err, ErrEmptyTask) {
+		t.Fatalf("expected ErrEmptyTask, got %v", err)
+	}
+}
+
+func TestMarkDoingReopensCompletedTask(t *testing.T) {
+	completedAt := time.Now()
+	item := Item{
+		Status:      StatusDone,
+		CompletedAt: &completedAt,
 	}
 
-	if todos[0].CreatedAt.IsZero() {
-		t.Fatal("expected CreatedAt to be set")
+	item.MarkDoing()
+
+	if item.Status != StatusDoing {
+		t.Fatalf("expected doing status, got %q", item.Status)
+	}
+	if item.CompletedAt != nil {
+		t.Fatal("expected CompletedAt to be cleared")
 	}
 }
 
 func TestComplete(t *testing.T) {
-	todos := Task{
-		{
-			Task:      "ship it",
-			CreatedAt: time.Now(),
-		},
+	completedAt := time.Date(2026, time.July, 28, 12, 30, 0, 0, time.UTC)
+	item := Item{Status: StatusDoing}
+
+	item.Complete(completedAt)
+
+	if item.Status != StatusDone {
+		t.Fatalf("expected done status, got %q", item.Status)
 	}
-
-	if err := todos.Complete(1); err != nil {
-		t.Fatalf("complete failed: %v", err)
-	}
-
-	if !todos[0].Done {
-		t.Fatal("expected task to be marked done")
-	}
-
-	if todos[0].CompletedAt == nil {
-		t.Fatal("expected CompletedAt to be set")
-	}
-
-	if todos[0].CompletedAt.IsZero() {
-		t.Fatal("expected CompletedAt to be non-zero")
-	}
-}
-
-func TestDoing(t *testing.T) {
-	todos := Task{
-		{
-			Task:      "in progress",
-			CreatedAt: time.Now(),
-		},
-	}
-
-	if err := todos.Doing(1); err != nil {
-		t.Fatalf("doing failed: %v", err)
-	}
-
-	if !todos[0].Doing {
-		t.Fatal("expected task to be marked doing")
-	}
-}
-
-func TestDelete(t *testing.T) {
-	todos := Task{
-		{Task: "one"},
-		{Task: "two"},
-	}
-
-	if err := todos.Delete(1); err != nil {
-		t.Fatalf("delete failed: %v", err)
-	}
-
-	if got := len(todos); got != 1 {
-		t.Fatalf("expected 1 task after delete, got %d", got)
-	}
-
-	if got := todos[0].Task; got != "two" {
-		t.Fatalf("expected remaining task %q, got %q", "two", got)
-	}
-}
-
-func TestInvalidIndex(t *testing.T) {
-	var todos Task
-
-	if err := todos.Complete(1); err == nil {
-		t.Fatal("expected complete to fail on empty task list")
-	}
-
-	if err := todos.Doing(0); err == nil {
-		t.Fatal("expected doing to fail on invalid index")
-	}
-
-	if err := todos.Delete(-1); err == nil {
-		t.Fatal("expected delete to fail on invalid index")
+	if item.CompletedAt == nil || !item.CompletedAt.Equal(completedAt) {
+		t.Fatalf("expected CompletedAt %v, got %v", completedAt, item.CompletedAt)
 	}
 }
 
 func TestCounter(t *testing.T) {
 	todos := Task{
-		{Done: false},
-		{Done: true},
-		{Done: false},
+		{Status: StatusTodo},
+		{Status: StatusDone},
+		{Status: StatusDoing},
 	}
 
 	if got := todos.Counter(); got != 2 {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -8,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/samEscom/tasky/store"
+	"github.com/samEscom/tasky/application"
 	"github.com/samEscom/tasky/task"
 )
 
@@ -77,7 +78,8 @@ var (
 
 // Model contains the interactive task manager state.
 type Model struct {
-	dataFile     string
+	ctx          context.Context
+	service      *application.Service
 	tasks        task.Task
 	operation    int
 	selectedTask int
@@ -90,8 +92,8 @@ type Model struct {
 	height       int
 }
 
-// New creates a TUI model backed by the supplied task file and task list.
-func New(dataFile string, todos task.Task) Model {
+// New creates a TUI model backed by the task application service.
+func New(ctx context.Context, service *application.Service, todos task.Task) Model {
 	input := textinput.New()
 	input.Prompt = "Task: "
 	input.Placeholder = "What needs to be done?"
@@ -99,17 +101,23 @@ func New(dataFile string, todos task.Task) Model {
 	input.Width = 36
 
 	return Model{
-		dataFile: dataFile,
-		tasks:    todos,
-		input:    input,
-		width:    100,
-		height:   30,
+		ctx:     ctx,
+		service: service,
+		tasks:   todos,
+		input:   input,
+		width:   100,
+		height:  30,
 	}
 }
 
 // Run starts the interactive task manager and returns the final in-memory list.
-func Run(dataFile string, todos task.Task) (task.Task, error) {
-	program := tea.NewProgram(New(dataFile, todos), tea.WithAltScreen())
+func Run(ctx context.Context, service *application.Service) (task.Task, error) {
+	todos, err := service.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	program := tea.NewProgram(New(ctx, service, todos), tea.WithAltScreen())
 	finalModel, err := program.Run()
 	if err != nil {
 		return todos, err
@@ -159,10 +167,8 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		previousLength := len(m.tasks)
-		m.tasks.Add(text)
-		if err := m.save(); err != nil {
-			m.tasks = m.tasks[:previousLength]
+		created, err := m.service.Add(m.ctx, text)
+		if err != nil {
 			m.setError(err)
 			return m, nil
 		}
@@ -170,7 +176,12 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.input.Blur()
 		m.input.Reset()
 		m.editing = false
-		m.selectedTask = len(m.tasks) - 1
+		m.tasks = append(m.tasks, created)
+		if err := m.reloadTasks(); err != nil {
+			m.setError(fmt.Errorf("task added but list refresh failed: %w", err))
+			return m, nil
+		}
+		m.selectTask(created.ID)
 		m.operation = opList
 		m.focus = tasksFocus
 		m.status = "Task added"
@@ -264,29 +275,28 @@ func (m *Model) executeTaskOperation() {
 		return
 	}
 
-	index := m.selectedTask + 1
-	var action func() error
+	id := m.tasks[m.selectedTask].ID
+	var action func(context.Context, int64) error
 	var status string
 	switch m.operation {
 	case opDoing:
-		action = func() error { return m.tasks.Doing(index) }
+		action = m.service.MarkDoing
 		status = "Task marked as doing"
 	case opComplete:
-		action = func() error { return m.tasks.Complete(index) }
+		action = m.service.Complete
 		status = "Task completed"
 	case opDelete:
-		action = func() error { return m.tasks.Delete(index) }
+		action = m.service.Delete
 		status = "Task deleted"
 	}
 
-	previous := append(task.Task(nil), m.tasks...)
-	if err := action(); err != nil {
+	if err := action(m.ctx, id); err != nil {
 		m.setError(err)
 		return
 	}
-	if err := m.save(); err != nil {
-		m.tasks = previous
-		m.setError(err)
+	if err := m.reloadTasks(); err != nil {
+		m.operation = opList
+		m.setError(fmt.Errorf("task updated but list refresh failed: %w", err))
 		return
 	}
 
@@ -297,11 +307,23 @@ func (m *Model) executeTaskOperation() {
 	m.status = status
 }
 
-func (m *Model) save() error {
-	if err := store.Save(m.dataFile, m.tasks); err != nil {
-		return fmt.Errorf("could not save tasks: %w", err)
+func (m *Model) reloadTasks() error {
+	todos, err := m.service.List(m.ctx)
+	if err != nil {
+		return err
 	}
+
+	m.tasks = todos
 	return nil
+}
+
+func (m *Model) selectTask(id int64) {
+	for index, item := range m.tasks {
+		if item.ID == id {
+			m.selectedTask = index
+			return
+		}
+	}
 }
 
 func (m *Model) setError(err error) {
@@ -381,7 +403,8 @@ func (m Model) taskView(width int) string {
 		for index, item := range m.tasks {
 			state, style := taskState(item)
 
-			line := fmt.Sprintf("%d  [%s]  %s", index+1, state, truncate(item.Task, width-12))
+			prefix := fmt.Sprintf("%d  [%s]  ", item.ID, state)
+			line := prefix + truncate(item.Task, width-lipgloss.Width(prefix)-4)
 			if index == m.selectedTask {
 				line = selectedStyle.Width(width - 4).Render(line)
 			} else {
@@ -406,10 +429,10 @@ func statusLegend() string {
 }
 
 func taskState(item task.Item) (string, lipgloss.Style) {
-	if item.Done {
+	if item.Status == task.StatusDone {
 		return "DONE", doneStyle
 	}
-	if item.Doing {
+	if item.Status == task.StatusDoing {
 		return "DOING", doingStyle
 	}
 	return "TODO", mutedStyle

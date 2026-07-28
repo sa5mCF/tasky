@@ -11,29 +11,28 @@ import (
 func PrintTasks(tasks task.Task) {
 	tw := table.NewWriter()
 	tw.SetStyle(table.StyleColoredDark)
-	tw.AppendHeader(table.Row{"#", "Task", "Done", "Doing", "CreatedAt", "CompletedAt"})
+	tw.AppendHeader(table.Row{"ID", "Task", "Status", "CreatedAt", "CompletedAt"})
 
-	for i, item := range tasks {
+	for _, item := range tasks {
 		completed := ""
 		if item.CompletedAt != nil {
 			completed = item.CompletedAt.Format(time.RFC822)
 		}
 
 		taskText := item.Task
-		if item.Done {
+		if item.Status == task.StatusDone {
 			taskText = fmt.Sprintf("\u2705 %s", item.Task)
 		}
 
 		tw.AppendRow(table.Row{
-			i + 1,
+			item.ID,
 			taskText,
-			item.Done,
-			item.Doing,
+			item.Status,
 			item.CreatedAt.Format(time.RFC822),
 			completed,
 		})
 	}
 
-	tw.AppendFooter(table.Row{"", "", "", "", "", fmt.Sprintf("There are %d pending tasks", tasks.Counter())})
+	tw.AppendFooter(table.Row{"", "", "", "", fmt.Sprintf("There are %d pending tasks", tasks.Counter())})
 	fmt.Println(tw.Render())
 }

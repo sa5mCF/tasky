@@ -4,7 +4,9 @@ A simple, fast, and terminal-based task manager built in Go.
 
 ## Overview
 
-Tasky allows you to track and manage your to-do lists straight from your terminal. It stores tasks in a local `.dataTodo.json` file. Running `tasky` without arguments opens an interactive Bubble Tea interface; flags remain available for scripted and quick terminal usage.
+Tasky allows you to track and manage your to-do lists straight from your terminal. It stores tasks in a local SQLite database at `~/.dataTodo.db`. Running `tasky` without arguments opens an interactive Bubble Tea interface; flags remain available for scripted and quick terminal usage.
+
+If `~/.dataTodo.json` exists when Tasky first opens the database, its tasks are imported once. The original JSON file is left unchanged as a backup.
 
 ## Installation
 
@@ -50,7 +52,7 @@ You can interact with Tasky by using the following flags:
 | `-complete` | Marks a task as "Done" (by ID) | `tasky -complete 1` |
 | `-delete` | Deletes a task from the list (by ID) | `tasky -delete 1` |
 
-*(The ID is the number shown in the `#` column when you list your tasks).*
+The ID shown in the table and TUI is stored by SQLite and remains stable. Deleted tasks can leave gaps in the sequence.
 
 ## Interactive mode
 
@@ -66,6 +68,7 @@ You can also use the included `Makefile` to quickly run commands under the hood:
 
 ## Tech Stack
 - [Go](https://go.dev/)
+- [SQLite](https://sqlite.org/) through the pure-Go [`modernc.org/sqlite`](https://pkg.go.dev/modernc.org/sqlite) driver.
 - [`bubbletea`](https://github.com/charmbracelet/bubbletea) for the interactive terminal interface.
 - [`lipgloss`](https://github.com/charmbracelet/lipgloss) for the dark interface theme.
 - [`go-pretty`](https://github.com/jedib0t/go-pretty) for terminal table formatting.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -34,5 +35,22 @@ func TestGetInputRejectsEmptyText(t *testing.T) {
 
 	if _, err := getInput(strings.NewReader("ignored"), "   "); err == nil {
 		t.Fatal("expected whitespace-only args to fail")
+	}
+}
+
+func TestResolveDataFiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	databasePath, legacyJSONPath, err := resolveDataFiles()
+	if err != nil {
+		t.Fatalf("resolveDataFiles failed: %v", err)
+	}
+
+	if databasePath != filepath.Join(home, ".dataTodo.db") {
+		t.Fatalf("unexpected database path: %q", databasePath)
+	}
+	if legacyJSONPath != filepath.Join(home, ".dataTodo.json") {
+		t.Fatalf("unexpected legacy JSON path: %q", legacyJSONPath)
 	}
 }
