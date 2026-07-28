@@ -62,4 +62,4 @@ You can also use the included `Makefile` to quickly run commands under the hood:
 
 ## Tech Stack
 - [Go](https://go.dev/)
-- [simpletable](https://github.com/alexeyco/simpletable) for terminal table formatting.
+- Standard library `text/tabwriter` for terminal table formatting.
