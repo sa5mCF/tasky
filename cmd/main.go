@@ -10,23 +10,19 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/samEscom/tasky/render"
+	"github.com/samEscom/tasky/store"
 	"github.com/samEscom/tasky/task"
 )
 
-var (
-	dataFile string
-)
-
-func init() {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Could not find home directory:", err)
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	dataFile = filepath.Join(home, ".dataTodo.json")
 }
 
-func main() {
+func run() error {
 	add := flag.Bool("add", false, "can add new task to do")
 	complete := flag.Int("complete", 0, "mark a task as completed")
 	doing := flag.Int("doing", 0, "mark a task as doing")
@@ -35,94 +31,96 @@ func main() {
 
 	flag.Parse()
 
-	todos := &task.Task{}
-
-	if *add == false && *complete == 0 && *doing == 0 && *deleted == 0 && *list == false {
+	if !*add && *complete == 0 && *doing == 0 && *deleted == 0 && !*list {
 		*list = true
 	}
 
-	err := todos.Load(dataFile)
-
+	dataFile, err := resolveDataFile()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+		return err
+	}
+
+	todos, err := store.Load(dataFile)
+	if err != nil {
+		return err
 	}
 
 	switch {
 	case *add:
-		task, err := getInput(os.Stdin, flag.Args()...)
+		taskText, err := getInput(os.Stdin, flag.Args()...)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
+			return err
 		}
 
-		todos.Add(task)
-		err = todos.Store(dataFile)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
+		todos.Add(taskText)
+		return store.Save(dataFile, todos)
 	case *complete > 0:
-		err := todos.Complete(*complete)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
+		if err := mutateAndSave(dataFile, &todos, func() error {
+			return todos.Complete(*complete)
+		}); err != nil {
+			return err
 		}
-
-		err = todos.Store(dataFile)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
+		return nil
 	case *doing > 0:
-		err := todos.Doing(*doing)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
-
-		err = todos.Store(dataFile)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
+		return mutateAndSave(dataFile, &todos, func() error {
+			return todos.Doing(*doing)
+		})
 	case *deleted > 0:
-		err := todos.Delete(*deleted)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
-
-		err = todos.Store(dataFile)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
+		return mutateAndSave(dataFile, &todos, func() error {
+			return todos.Delete(*deleted)
+		})
 	case *list:
-		todos.PrintTasks()
+		render.PrintTasks(todos)
 	default:
-		fmt.Fprintln(os.Stdout, "invalid a command")
-		os.Exit(0)
+		return errors.New("invalid command")
 	}
+
+	return nil
+}
+
+func mutateAndSave(filename string, todos *task.Task, mutate func() error) error {
+	if err := mutate(); err != nil {
+		return err
+	}
+
+	return store.Save(filename, *todos)
+}
+
+func resolveDataFile() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not find home directory: %w", err)
+	}
+
+	return filepath.Join(home, ".dataTodo.json"), nil
 }
 
 func getInput(r io.Reader, args ...string) (string, error) {
-
 	if len(args) > 0 {
-		return strings.Join(args, " "), nil
+		taskText := strings.TrimSpace(strings.Join(args, " "))
+		if taskText == "" {
+			return "", errors.New("empty task, not allowed")
+		}
+		return taskText, nil
 	}
 
 	scanner := bufio.NewScanner(r)
-	scanner.Scan()
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", err
+		}
+		return "", errors.New("empty task, not allowed")
+	}
 
 	if err := scanner.Err(); err != nil {
 		return "", err
 	}
 
-	if len(scanner.Text()) == 0 {
+	taskText := strings.TrimSpace(scanner.Text())
+	if len(taskText) == 0 {
 		return "", errors.New("empty task, not allowed")
 	}
 
-	return scanner.Text(), nil
+	return taskText, nil
 
 }
