@@ -13,6 +13,7 @@ import (
 	"github.com/samEscom/tasky/render"
 	"github.com/samEscom/tasky/store"
 	"github.com/samEscom/tasky/task"
+	"github.com/samEscom/tasky/tui"
 )
 
 func main() {
@@ -31,9 +32,7 @@ func run() error {
 
 	flag.Parse()
 
-	if !*add && *complete == 0 && *doing == 0 && *deleted == 0 && !*list {
-		*list = true
-	}
+	hasCommand := *add || *complete > 0 || *doing > 0 || *deleted > 0 || *list
 
 	dataFile, err := resolveDataFile()
 	if err != nil {
@@ -42,6 +41,11 @@ func run() error {
 
 	todos, err := store.Load(dataFile)
 	if err != nil {
+		return err
+	}
+
+	if !hasCommand && len(flag.Args()) == 0 {
+		_, err := tui.Run(dataFile, todos)
 		return err
 	}
 

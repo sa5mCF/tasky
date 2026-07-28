@@ -4,7 +4,7 @@ A simple, fast, and terminal-based task manager built in Go.
 
 ## Overview
 
-Tasky allows you to track and manage your to-do lists straight from your terminal. It stores tasks in a local `.dataTodo.json` file and provides a colorful table view to easily check task statuses such as pending, doing, or completed.
+Tasky allows you to track and manage your to-do lists straight from your terminal. It stores tasks in a local `.dataTodo.json` file. Running `tasky` without arguments opens an interactive Bubble Tea interface; flags remain available for scripted and quick terminal usage.
 
 ## Installation
 
@@ -43,7 +43,7 @@ You can interact with Tasky by using the following flags:
 
 | Flag | Description | Example |
 | :--- | :--- | :--- |
-| **No Flag** | Lists all tasks (defaults to `-list`) | `tasky` |
+| **No Flag** | Opens the interactive task manager | `tasky` |
 | `-list` | Lists all tasks | `tasky -list` |
 | `-add` | Adds a new task | `tasky -add "Buy groceries"` |
 | `-doing` | Marks a task as "Doing" (by ID) | `tasky -doing 1` |
@@ -51,6 +51,10 @@ You can interact with Tasky by using the following flags:
 | `-delete` | Deletes a task from the list (by ID) | `tasky -delete 1` |
 
 *(The ID is the number shown in the `#` column when you list your tasks).*
+
+## Interactive mode
+
+The default interface has an operations panel and a task panel. Use `Tab` to switch between them, the arrow keys or `j`/`k` to move, and `Enter` to select. `Add task` opens an input field and saves the new task immediately. Press `q` or `Ctrl+C` to exit.
 
 ## Building manually with Make if you want to contribute to the project
 
@@ -62,4 +66,6 @@ You can also use the included `Makefile` to quickly run commands under the hood:
 
 ## Tech Stack
 - [Go](https://go.dev/)
+- [`bubbletea`](https://github.com/charmbracelet/bubbletea) for the interactive terminal interface.
+- [`lipgloss`](https://github.com/charmbracelet/lipgloss) for the dark interface theme.
 - [`go-pretty`](https://github.com/jedib0t/go-pretty) for terminal table formatting.
